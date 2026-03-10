@@ -1,5 +1,8 @@
 # Deploying to fly.io
 
+> [!WARNING]
+> This guide and `Dockerfile.node` target **`@cartesi/cli` v1.5.x** (rollups-node v1.5.1) only.
+
 This project uses `Dockerfile.node` instead of the default Cartesi node image to work around a **5-second ready-timeout bug** in the Cartesi go-supervisor that causes the `inspect-server` to be killed before it finishes initialising on fly.io.
 
 The fix uses [nitro](https://github.com/leahneukirchen/nitro) as the process supervisor (no ready-timeout) and nginx as the HTTP reverse proxy.
@@ -55,14 +58,19 @@ fly secrets set \
 ```bash
 fly secrets set \
   --app <your-app-name> \
-  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT="https://..." \
-  CARTESI_BLOCKCHAIN_WS_ENDPOINT="wss://..."    \
+  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT="https://sepolia.infura.io/v3/<YOUR_KEY>" \
+  CARTESI_BLOCKCHAIN_WS_ENDPOINT="wss://sepolia.infura.io/ws/v3/<YOUR_KEY>" \
   CARTESI_AUTH_MNEMONIC="word1 word2 word3 ..."
 ```
 
+> **RPC provider notes:**
+> - [Infura](https://infura.io) works well on the free tier for testnets.
+> - [Alchemy](https://alchemy.com) requires a paid plan to avoid rate-limit errors under node load.
+> - For mainnet deployments, use a provider with WebSocket support and generous rate limits.
+
 | Secret | Description |
 |--------|-------------|
-| `CARTESI_BLOCKCHAIN_HTTP_ENDPOINT` | RPC HTTP URL (e.g. Alchemy/Infura) |
+| `CARTESI_BLOCKCHAIN_HTTP_ENDPOINT` | RPC HTTP URL (Infura/Alchemy/etc.) |
 | `CARTESI_BLOCKCHAIN_WS_ENDPOINT` | RPC WebSocket URL |
 | `CARTESI_AUTH_MNEMONIC` | Wallet mnemonic for the authority claimer |
 | `CARTESI_AUTH_MNEMONIC_ACCOUNT_INDEX` | (optional) Account index, default `0` |
@@ -78,25 +86,31 @@ The non-sensitive contract addresses and chain config are already in `fly.toml [
 Run these steps every time you want to push a new version.
 
 ```bash
-# 1. Rebuild the machine snapshot if dapp code changed
+# Rebuild the machine snapshot if dapp code changed
 cartesi build
 
-# 2. Re-authenticate to the fly registry
+# Build, push and deploy in one step
+./deploy.sh
+```
+
+<details>
+<summary>Manual steps (what deploy.sh does under the hood)</summary>
+
+```bash
 fly auth docker
 
-# 3. Build the node Docker image for amd64
 docker build \
   --platform linux/amd64 \
   -f Dockerfile.node \
   -t registry.fly.io/<your-app-name> \
   .cartesi/image/
 
-# 4. Push the image
 docker push registry.fly.io/<your-app-name>
 
-# 5. Deploy
 fly deploy
 ```
+
+</details>
 
 ---
 

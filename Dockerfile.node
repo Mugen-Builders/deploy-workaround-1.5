@@ -53,10 +53,19 @@ RUN make -j$(nproc)
 ########################################
 FROM scratch AS nitro-config
 
+# ── common env (sourced by every run script) ─────────────────────────────────
+COPY --chmod=644 <<'EOF' /etc/nitro/common.env
+# Evaluated at container runtime, not build time.
+BASE=${CARTESI_HTTP_PORT:-10000}
+LOG_ENABLE_TIMESTAMP=false
+LOG_ENABLE_COLOR=false
+RUST_LOG=info
+EOF
+
 # ── redis ────────────────────────────────────────────────────────────────────
 COPY --chmod=755 <<'EOF' /etc/nitro/redis/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
+set -a; source /etc/nitro/common.env
 exec redis-server \
     --port $((BASE+11)) \
     --save "" \
@@ -66,55 +75,46 @@ EOF
 # ── graphql-server ───────────────────────────────────────────────────────────
 COPY --chmod=755 <<'EOF' /etc/nitro/graphql-server/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
-export LOG_ENABLE_TIMESTAMP=false
-export LOG_ENABLE_COLOR=false
-export RUST_LOG=info
-export POSTGRES_ENDPOINT=${CARTESI_POSTGRES_ENDPOINT}
-export GRAPHQL_HOST=127.0.0.1
-export GRAPHQL_PORT=$((BASE+4))
-export GRAPHQL_HEALTHCHECK_PORT=$((BASE+5))
+set -a; source /etc/nitro/common.env
+POSTGRES_ENDPOINT=${CARTESI_POSTGRES_ENDPOINT}
+GRAPHQL_HOST=127.0.0.1
+GRAPHQL_PORT=$((BASE+4))
+GRAPHQL_HEALTHCHECK_PORT=$((BASE+5))
 exec cartesi-rollups-graphql-server
 EOF
 
 # ── indexer ──────────────────────────────────────────────────────────────────
 COPY --chmod=755 <<'EOF' /etc/nitro/indexer/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
-export LOG_ENABLE_TIMESTAMP=false
-export LOG_ENABLE_COLOR=false
-export RUST_LOG=info
-export POSTGRES_ENDPOINT=${CARTESI_POSTGRES_ENDPOINT}
-export CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
-export DAPP_CONTRACT_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
-export REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
-export INDEXER_HEALTHCHECK_PORT=$((BASE+8))
+set -a; source /etc/nitro/common.env
+POSTGRES_ENDPOINT=${CARTESI_POSTGRES_ENDPOINT}
+CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
+DAPP_CONTRACT_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
+REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
+INDEXER_HEALTHCHECK_PORT=$((BASE+8))
 exec cartesi-rollups-indexer
 EOF
 
 # ── state-server ─────────────────────────────────────────────────────────────
 COPY --chmod=755 <<'EOF' /etc/nitro/state-server/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
-export LOG_ENABLE_TIMESTAMP=false
-export LOG_ENABLE_COLOR=false
-export RUST_LOG=info
-export SF_CONCURRENT_EVENTS_FETCH=1
-export SF_GENESIS_BLOCK=${CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER}
-export SF_SAFETY_MARGIN=${CARTESI_BLOCKCHAIN_FINALITY_OFFSET:-1}
-export BH_WS_ENDPOINT=${CARTESI_BLOCKCHAIN_WS_ENDPOINT}
-export BH_HTTP_ENDPOINT=${CARTESI_BLOCKCHAIN_HTTP_ENDPOINT}
-export BLOCKCHAIN_BLOCK_TIMEOUT=${CARTESI_BLOCKCHAIN_BLOCK_TIMEOUT:-60}
-export SS_SERVER_ADDRESS=127.0.0.1:$((BASE+13))
+set -a; source /etc/nitro/common.env
+SF_CONCURRENT_EVENTS_FETCH=1
+SF_GENESIS_BLOCK=${CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER}
+SF_SAFETY_MARGIN=${CARTESI_BLOCKCHAIN_FINALITY_OFFSET:-1}
+BH_WS_ENDPOINT=${CARTESI_BLOCKCHAIN_WS_ENDPOINT}
+BH_HTTP_ENDPOINT=${CARTESI_BLOCKCHAIN_HTTP_ENDPOINT}
+BLOCKCHAIN_BLOCK_TIMEOUT=${CARTESI_BLOCKCHAIN_BLOCK_TIMEOUT:-60}
+SS_SERVER_ADDRESS=127.0.0.1:$((BASE+13))
 exec cartesi-rollups-state-server
 EOF
 
 # ── server-manager ───────────────────────────────────────────────────────────
 COPY --chmod=755 <<'EOF' /etc/nitro/server-manager/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
-export REMOTE_CARTESI_MACHINE_LOG_LEVEL=info
-export SERVER_MANAGER_LOG_LEVEL=warning
+set -a; source /etc/nitro/common.env
+REMOTE_CARTESI_MACHINE_LOG_LEVEL=info
+SERVER_MANAGER_LOG_LEVEL=warning
 exec server-manager \
     --manager-address=127.0.0.1:$((BASE+12))
 EOF
@@ -124,33 +124,28 @@ EOF
 # fly secrets, OR set the CARTESI_AUTH_* vars and they will be translated below.
 COPY --chmod=755 <<'EOF' /etc/nitro/authority-claimer/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
-export LOG_ENABLE_TIMESTAMP=false
-export LOG_ENABLE_COLOR=false
-export RUST_LOG=info
-export TX_PROVIDER_HTTP_ENDPOINT=${CARTESI_BLOCKCHAIN_HTTP_ENDPOINT}
-export TX_CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
-export TX_CHAIN_IS_LEGACY=${CARTESI_BLOCKCHAIN_IS_LEGACY:-false}
-export TX_DEFAULT_CONFIRMATIONS=${CARTESI_BLOCKCHAIN_FINALITY_OFFSET:-1}
-export REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
-export HISTORY_ADDRESS=${CARTESI_CONTRACTS_HISTORY_ADDRESS}
-export AUTHORITY_ADDRESS=${CARTESI_CONTRACTS_AUTHORITY_ADDRESS}
-export INPUT_BOX_ADDRESS=${CARTESI_CONTRACTS_INPUT_BOX_ADDRESS}
-export DAPP_CONTRACT_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
-export GENESIS_BLOCK=${CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER}
-export AUTHORITY_CLAIMER_HTTP_SERVER_PORT=$((BASE+2))
+set -a; source /etc/nitro/common.env
+TX_PROVIDER_HTTP_ENDPOINT=${CARTESI_BLOCKCHAIN_HTTP_ENDPOINT}
+TX_CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
+TX_CHAIN_IS_LEGACY=${CARTESI_BLOCKCHAIN_IS_LEGACY:-false}
+TX_DEFAULT_CONFIRMATIONS=${CARTESI_BLOCKCHAIN_FINALITY_OFFSET:-1}
+REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
+HISTORY_ADDRESS=${CARTESI_CONTRACTS_HISTORY_ADDRESS}
+AUTHORITY_ADDRESS=${CARTESI_CONTRACTS_AUTHORITY_ADDRESS}
+INPUT_BOX_ADDRESS=${CARTESI_CONTRACTS_INPUT_BOX_ADDRESS}
+DAPP_CONTRACT_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
+GENESIS_BLOCK=${CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER}
+AUTHORITY_CLAIMER_HTTP_SERVER_PORT=$((BASE+2))
 
 # Translate CARTESI_AUTH_* -> TX_SIGNING_* if the latter are not already set
-if [[ -z "${TX_SIGNING_PRIVATE_KEY}" && -n "${CARTESI_AUTH_PRIVATE_KEY}" ]]; then
-    export TX_SIGNING_PRIVATE_KEY=${CARTESI_AUTH_PRIVATE_KEY}
-fi
+[[ -z "${TX_SIGNING_PRIVATE_KEY}" && -n "${CARTESI_AUTH_PRIVATE_KEY}" ]] && TX_SIGNING_PRIVATE_KEY=${CARTESI_AUTH_PRIVATE_KEY}
 if [[ -z "${TX_SIGNING_MNEMONIC}" && -n "${CARTESI_AUTH_MNEMONIC}" ]]; then
-    export TX_SIGNING_MNEMONIC=${CARTESI_AUTH_MNEMONIC}
-    export TX_SIGNING_MNEMONIC_ACCOUNT_INDEX=${CARTESI_AUTH_MNEMONIC_ACCOUNT_INDEX:-0}
+    TX_SIGNING_MNEMONIC=${CARTESI_AUTH_MNEMONIC}
+    TX_SIGNING_MNEMONIC_ACCOUNT_INDEX=${CARTESI_AUTH_MNEMONIC_ACCOUNT_INDEX:-0}
 fi
 if [[ -z "${TX_SIGNING_AWS_KMS_KEY_ID}" && -n "${CARTESI_AUTH_AWS_KMS_KEY_ID}" ]]; then
-    export TX_SIGNING_AWS_KMS_KEY_ID=${CARTESI_AUTH_AWS_KMS_KEY_ID}
-    export TX_SIGNING_AWS_KMS_REGION=${CARTESI_AUTH_AWS_KMS_REGION}
+    TX_SIGNING_AWS_KMS_KEY_ID=${CARTESI_AUTH_AWS_KMS_KEY_ID}
+    TX_SIGNING_AWS_KMS_REGION=${CARTESI_AUTH_AWS_KMS_REGION}
 fi
 
 exec cartesi-rollups-authority-claimer
@@ -160,24 +155,21 @@ EOF
 # Depends on server-manager; wait for its port before starting.
 COPY --chmod=755 <<'EOF' /etc/nitro/advance-runner/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
+set -a; source /etc/nitro/common.env
 SM_PORT=$((BASE+12))
 echo "advance-runner: waiting for server-manager on port ${SM_PORT}…"
 until (echo > /dev/tcp/127.0.0.1/${SM_PORT}) 2>/dev/null; do sleep 2; done
 echo "advance-runner: server-manager ready"
 
-export LOG_ENABLE_TIMESTAMP=false
-export LOG_ENABLE_COLOR=false
-export RUST_LOG=info
-export SERVER_MANAGER_ENDPOINT=http://127.0.0.1:${SM_PORT}
-export SESSION_ID=default_session_id
-export REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
-export CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
-export DAPP_CONTRACT_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
-export PROVIDER_HTTP_ENDPOINT=${CARTESI_BLOCKCHAIN_HTTP_ENDPOINT}
-export ADVANCE_RUNNER_HEALTHCHECK_PORT=$((BASE+1))
-export READER_MODE=${CARTESI_FEATURE_READER_MODE_ENABLED:-false}
-export MACHINE_SNAPSHOT_PATH=${CARTESI_SNAPSHOT_DIR:-/usr/share/rollups-node/snapshot}
+SERVER_MANAGER_ENDPOINT=http://127.0.0.1:${SM_PORT}
+SESSION_ID=default_session_id
+REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
+CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
+DAPP_CONTRACT_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
+PROVIDER_HTTP_ENDPOINT=${CARTESI_BLOCKCHAIN_HTTP_ENDPOINT}
+ADVANCE_RUNNER_HEALTHCHECK_PORT=$((BASE+1))
+READER_MODE=${CARTESI_FEATURE_READER_MODE_ENABLED:-false}
+MACHINE_SNAPSHOT_PATH=${CARTESI_SNAPSHOT_DIR:-/usr/share/rollups-node/snapshot}
 exec cartesi-rollups-advance-runner
 EOF
 
@@ -185,26 +177,23 @@ EOF
 # Depends on state-server; wait for its port before starting.
 COPY --chmod=755 <<'EOF' /etc/nitro/dispatcher/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
+set -a; source /etc/nitro/common.env
 SS_PORT=$((BASE+13))
 echo "dispatcher: waiting for state-server on port ${SS_PORT}…"
 until (echo > /dev/tcp/127.0.0.1/${SS_PORT}) 2>/dev/null; do sleep 2; done
 echo "dispatcher: state-server ready"
 
-export LOG_ENABLE_TIMESTAMP=false
-export LOG_ENABLE_COLOR=false
-export RUST_LOG=info
-export SC_GRPC_ENDPOINT=http://127.0.0.1:${SS_PORT}
-export SC_DEFAULT_CONFIRMATIONS=${CARTESI_BLOCKCHAIN_FINALITY_OFFSET:-1}
-export REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
-export DAPP_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
-export INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER=${CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER}
-export HISTORY_ADDRESS=${CARTESI_CONTRACTS_HISTORY_ADDRESS}
-export AUTHORITY_ADDRESS=${CARTESI_CONTRACTS_AUTHORITY_ADDRESS}
-export INPUT_BOX_ADDRESS=${CARTESI_CONTRACTS_INPUT_BOX_ADDRESS}
-export RD_EPOCH_LENGTH=${CARTESI_EPOCH_LENGTH:-7200}
-export CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
-export DISPATCHER_HTTP_SERVER_PORT=$((BASE+3))
+SC_GRPC_ENDPOINT=http://127.0.0.1:${SS_PORT}
+SC_DEFAULT_CONFIRMATIONS=${CARTESI_BLOCKCHAIN_FINALITY_OFFSET:-1}
+REDIS_ENDPOINT=redis://127.0.0.1:$((BASE+11))
+DAPP_ADDRESS=${CARTESI_CONTRACTS_APPLICATION_ADDRESS}
+INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER=${CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER}
+HISTORY_ADDRESS=${CARTESI_CONTRACTS_HISTORY_ADDRESS}
+AUTHORITY_ADDRESS=${CARTESI_CONTRACTS_AUTHORITY_ADDRESS}
+INPUT_BOX_ADDRESS=${CARTESI_CONTRACTS_INPUT_BOX_ADDRESS}
+RD_EPOCH_LENGTH=${CARTESI_EPOCH_LENGTH:-7200}
+CHAIN_ID=${CARTESI_BLOCKCHAIN_ID}
+DISPATCHER_HTTP_SERVER_PORT=$((BASE+3))
 exec cartesi-rollups-dispatcher
 EOF
 
@@ -213,19 +202,16 @@ EOF
 # This is the service that was hitting the go-supervisor 5s timeout on fly.io.
 COPY --chmod=755 <<'EOF' /etc/nitro/inspect-server/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
+set -a; source /etc/nitro/common.env
 SM_PORT=$((BASE+12))
 echo "inspect-server: waiting for server-manager on port ${SM_PORT}…"
 until (echo > /dev/tcp/127.0.0.1/${SM_PORT}) 2>/dev/null; do sleep 2; done
 echo "inspect-server: server-manager ready"
 
-export LOG_ENABLE_TIMESTAMP=false
-export LOG_ENABLE_COLOR=false
-export RUST_LOG=info
-export INSPECT_SERVER_ADDRESS=127.0.0.1:$((BASE+9))
-export SERVER_MANAGER_ADDRESS=127.0.0.1:${SM_PORT}
-export SESSION_ID=default_session_id
-export INSPECT_SERVER_HEALTHCHECK_PORT=$((BASE+10))
+INSPECT_SERVER_ADDRESS=127.0.0.1:$((BASE+9))
+SERVER_MANAGER_ADDRESS=127.0.0.1:${SM_PORT}
+SESSION_ID=default_session_id
+INSPECT_SERVER_HEALTHCHECK_PORT=$((BASE+10))
 exec cartesi-rollups-inspect-server
 EOF
 
@@ -237,7 +223,7 @@ EOF
 #   *    /metrics   -> dispatcher      (BASE+3)
 COPY --chmod=755 <<'EOF' /etc/nitro/nginx/run
 #!/usr/bin/env bash
-BASE=${CARTESI_HTTP_PORT:-10000}
+set -a; source /etc/nitro/common.env
 GRAPHQL_PORT=$((BASE+4))
 INSPECT_PORT=$((BASE+9))
 METRICS_PORT=$((BASE+3))
